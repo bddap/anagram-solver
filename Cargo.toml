@@ -1,0 +1,9 @@
+[package]
+name = "anagram-solver"
+version = "0.1.0"
+authors = ["Andrew Dirksen <andrew@dirksen.com>"]
+description = "multi-word anagram finder"
+
+[dependencies]
+libflate = "0.1.18"
+enum-map = "0.4.1"
