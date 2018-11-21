@@ -1,4 +1,5 @@
 use enum_map::EnumMap;
+use std::ops::Index;
 
 #[derive(Enum, Copy, Clone)]
 pub enum Letter {
@@ -103,18 +104,10 @@ impl Letter {
     }
 }
 
-struct CountedWord {
-    word: Vec<Letter>,
-    counts: EnumMap<Letter, u32>,
-}
+struct LetterCounts(EnumMap<Letter, u32>);
 
-impl CountedWord {
-    pub(crate) fn from_word(word: Vec<Letter>) -> CountedWord {
-        let counts = CountedWord::count_letters(&word);
-        CountedWord { word, counts }
-    }
-
-    fn count_letters(word: &[Letter]) -> EnumMap<Letter, u32> {
+impl LetterCounts {
+    pub(crate) fn count_letters(word: &[Letter]) -> LetterCounts {
         let mut ret = enum_map!{
             Letter::A => 0,
             _ => 0,
@@ -122,7 +115,35 @@ impl CountedWord {
         for letter in word {
             ret[*letter] += 1;
         }
-        ret
+        LetterCounts(ret)
+    }
+
+    pub(crate) fn checked_sub(&self, other: &LetterCounts) -> Option<LetterCounts> {
+        let mut ret = EnumMap::new();
+        for (key, val) in self.0 {
+            ret[key] = val.checked_sub(other.0[key])?;
+        }
+        Some(LetterCounts(ret))
+    }
+}
+
+impl Index<Letter> for LetterCounts {
+    type Output = u32;
+
+    fn index(&self, index: Letter) -> &u32 {
+        &self.0[index]
+    }
+}
+
+struct CountedWord {
+    word: Vec<Letter>,
+    counts: LetterCounts,
+}
+
+impl CountedWord {
+    pub(crate) fn from_word(word: Vec<Letter>) -> CountedWord {
+        let counts = LetterCounts::count_letters(&word);
+        CountedWord { word, counts }
     }
 
     fn from_words(mut words: Vec<Vec<Letter>>) -> Vec<CountedWord> {
@@ -155,15 +176,14 @@ impl<'a> WordList<'a> {
         ret
     }
 
-    pub fn find_anagrams(&self, letters: &[Letter]) -> Option<Vec<&'a [Letter]>> {
-        let counted = CountedWord::from_word(letters.iter().map(|a| *a).collect());
+    pub fn find_anagrams(&self, lc: &LetterCounts) -> Option<Vec<&'a [Letter]>> {
         None
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{CountedWord, Letter, WordList};
+    use super::{CountedWord, Letter, LetterCounts, WordList};
     use english_words::get_words;
 
     #[test]
@@ -172,6 +192,7 @@ mod tests {
         let counted_words = CountedWord::from_words(words);
         let word_list = WordList::new(&counted_words);
         let letters = Letter::from_bytes(b"racecarracecar").unwrap();
-        word_list.find_anagrams(&letters).unwrap();
+        let letter_counts = LetterCounts::count_letters(&letters);
+        word_list.find_anagrams(&letter_counts).unwrap();
     }
 }
