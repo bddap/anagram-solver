@@ -1,7 +1,7 @@
 use enum_map::EnumMap;
 use std::ops::Index;
 
-#[derive(Enum, Copy, Clone)]
+#[derive(Enum, Copy, Clone, Debug)]
 pub enum Letter {
     A,
     B,
@@ -68,46 +68,46 @@ impl Letter {
         }
     }
 
-    pub fn to_byte(self) -> u8 {
-        match self {
-            Letter::A => b'a',
-            Letter::B => b'b',
-            Letter::C => b'c',
-            Letter::D => b'd',
-            Letter::E => b'e',
-            Letter::F => b'f',
-            Letter::G => b'g',
-            Letter::H => b'h',
-            Letter::I => b'i',
-            Letter::J => b'j',
-            Letter::K => b'k',
-            Letter::L => b'l',
-            Letter::M => b'm',
-            Letter::N => b'n',
-            Letter::O => b'o',
-            Letter::P => b'p',
-            Letter::Q => b'q',
-            Letter::R => b'r',
-            Letter::S => b's',
-            Letter::T => b't',
-            Letter::U => b'u',
-            Letter::V => b'v',
-            Letter::W => b'w',
-            Letter::X => b'x',
-            Letter::Y => b'y',
-            Letter::Z => b'z',
-        }
-    }
-
     pub fn from_bytes(other: &[u8]) -> Option<Vec<Letter>> {
         other.iter().map(Letter::from_byte).collect()
     }
+
+    pub fn inc(self) -> Option<Letter> {
+        match self {
+            Letter::A => Some(Letter::B),
+            Letter::B => Some(Letter::C),
+            Letter::C => Some(Letter::D),
+            Letter::D => Some(Letter::E),
+            Letter::E => Some(Letter::F),
+            Letter::F => Some(Letter::G),
+            Letter::G => Some(Letter::H),
+            Letter::H => Some(Letter::I),
+            Letter::I => Some(Letter::J),
+            Letter::J => Some(Letter::K),
+            Letter::K => Some(Letter::L),
+            Letter::L => Some(Letter::M),
+            Letter::M => Some(Letter::N),
+            Letter::N => Some(Letter::O),
+            Letter::O => Some(Letter::P),
+            Letter::P => Some(Letter::Q),
+            Letter::Q => Some(Letter::R),
+            Letter::R => Some(Letter::S),
+            Letter::S => Some(Letter::T),
+            Letter::T => Some(Letter::U),
+            Letter::U => Some(Letter::V),
+            Letter::V => Some(Letter::W),
+            Letter::W => Some(Letter::X),
+            Letter::X => Some(Letter::Y),
+            Letter::Y => Some(Letter::Z),
+            Letter::Z => None,
+        }
+    }
 }
 
-struct LetterCounts(EnumMap<Letter, u32>);
+pub struct LetterCounts(EnumMap<Letter, usize>);
 
 impl LetterCounts {
-    pub(crate) fn count_letters(word: &[Letter]) -> LetterCounts {
+    pub fn count_letters(word: &[Letter]) -> LetterCounts {
         let mut ret = enum_map!{
             Letter::A => 0,
             _ => 0,
@@ -118,7 +118,7 @@ impl LetterCounts {
         LetterCounts(ret)
     }
 
-    pub(crate) fn checked_sub(&self, other: &LetterCounts) -> Option<LetterCounts> {
+    pub fn checked_sub(&self, other: &LetterCounts) -> Option<LetterCounts> {
         let mut ret = EnumMap::new();
         for (key, val) in self.0 {
             ret[key] = val.checked_sub(other.0[key])?;
@@ -127,26 +127,32 @@ impl LetterCounts {
     }
 }
 
-impl Index<Letter> for LetterCounts {
-    type Output = u32;
+impl Default for LetterCounts {
+    fn default() -> LetterCounts {
+        LetterCounts(enum_map!{_ => 0})
+    }
+}
 
-    fn index(&self, index: Letter) -> &u32 {
+impl Index<Letter> for LetterCounts {
+    type Output = usize;
+
+    fn index(&self, index: Letter) -> &usize {
         &self.0[index]
     }
 }
 
-struct CountedWord {
+pub struct CountedWord {
     word: Vec<Letter>,
     counts: LetterCounts,
 }
 
 impl CountedWord {
-    pub(crate) fn from_word(word: Vec<Letter>) -> CountedWord {
+    pub fn from_word(word: Vec<Letter>) -> CountedWord {
         let counts = LetterCounts::count_letters(&word);
         CountedWord { word, counts }
     }
 
-    fn from_words(mut words: Vec<Vec<Letter>>) -> Vec<CountedWord> {
+    pub fn from_words(mut words: Vec<Vec<Letter>>) -> Vec<CountedWord> {
         words
             .drain(..)
             .map(|word| CountedWord::from_word(word))
@@ -154,8 +160,7 @@ impl CountedWord {
     }
 }
 
-struct WordList<'a> {
-    words: &'a [CountedWord],
+pub struct WordList<'a> {
     sorted_lists: EnumMap<Letter, Vec<&'a CountedWord>>,
 }
 
@@ -165,7 +170,6 @@ impl<'a> WordList<'a> {
             letter => WordList::sorted_list_for(words, letter),
         };
         WordList {
-            words,
             sorted_lists,
         }
     }
@@ -175,15 +179,52 @@ impl<'a> WordList<'a> {
         ret.sort_by(|a, b| a.counts[letter].cmp(&b.counts[letter]));
         ret
     }
+}
 
-    pub fn find_anagrams(&self, lc: &LetterCounts) -> Option<Vec<&'a [Letter]>> {
-        None
+pub fn find<'a>(wl: &WordList, target: LetterCounts) -> Option<Vec<Vec<Letter>>> {
+    _find(wl, Letter::A, target).map(|vec| {
+        vec.iter()
+            .map(|counted_word| counted_word.word.clone())
+            .collect()
+    })
+}
+
+fn _find<'a>(
+    wl: &'a WordList,
+    letter: Letter,
+    target: LetterCounts,
+) -> Option<Vec<&'a CountedWord>> {
+    if target[letter] == 0 {
+        // go to next letter
+        // incrementing past Z returns none
+        // none means we found an anagram
+        return match letter.inc() {
+            Some(next_letter) => _find(wl, next_letter, target),
+            None => Some(Vec::new()),
+        };
     }
+
+    for word in wl.sorted_lists[letter]
+        .iter()
+        .take_while(|w| w.counts[letter] <= target[letter])
+    {
+        match target.checked_sub(&word.counts) {
+            Some(new_target) => match _find(wl, letter, new_target) {
+                Some(mut vec) => {
+                    vec.push(word);
+                    return Some(vec);
+                }
+                None => {}
+            },
+            None => {}
+        }
+    }
+    None
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{CountedWord, Letter, LetterCounts, WordList};
+    use super::{find, CountedWord, Letter, LetterCounts, WordList};
     use english_words::get_words;
 
     #[test]
@@ -193,6 +234,6 @@ mod tests {
         let word_list = WordList::new(&counted_words);
         let letters = Letter::from_bytes(b"racecarracecar").unwrap();
         let letter_counts = LetterCounts::count_letters(&letters);
-        word_list.find_anagrams(&letter_counts).unwrap();
+        find(&word_list, letter_counts).unwrap();
     }
 }
