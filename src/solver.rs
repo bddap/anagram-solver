@@ -102,12 +102,74 @@ impl Letter {
     pub fn from_bytes(other: &[u8]) -> Option<Vec<Letter>> {
         other.iter().map(Letter::from_byte).collect()
     }
+
+    pub fn inc(self) -> Option<Letter> {
+        match self {
+            Letter::A => Some(Letter::B),
+            Letter::B => Some(Letter::C),
+            Letter::C => Some(Letter::D),
+            Letter::D => Some(Letter::E),
+            Letter::E => Some(Letter::F),
+            Letter::F => Some(Letter::G),
+            Letter::G => Some(Letter::H),
+            Letter::H => Some(Letter::I),
+            Letter::I => Some(Letter::J),
+            Letter::J => Some(Letter::K),
+            Letter::K => Some(Letter::L),
+            Letter::L => Some(Letter::M),
+            Letter::M => Some(Letter::N),
+            Letter::N => Some(Letter::O),
+            Letter::O => Some(Letter::P),
+            Letter::P => Some(Letter::Q),
+            Letter::Q => Some(Letter::R),
+            Letter::R => Some(Letter::S),
+            Letter::S => Some(Letter::T),
+            Letter::T => Some(Letter::U),
+            Letter::U => Some(Letter::V),
+            Letter::V => Some(Letter::W),
+            Letter::W => Some(Letter::X),
+            Letter::X => Some(Letter::Y),
+            Letter::Y => Some(Letter::Z),
+            Letter::Z => None,
+        }
+    }
+
+    pub fn dec(self) -> Option<Letter> {
+        match self {
+            Letter::A => None,
+            Letter::B => Some(Letter::A),
+            Letter::C => Some(Letter::B),
+            Letter::D => Some(Letter::C),
+            Letter::E => Some(Letter::D),
+            Letter::F => Some(Letter::E),
+            Letter::G => Some(Letter::F),
+            Letter::H => Some(Letter::G),
+            Letter::I => Some(Letter::H),
+            Letter::J => Some(Letter::I),
+            Letter::K => Some(Letter::J),
+            Letter::L => Some(Letter::K),
+            Letter::M => Some(Letter::L),
+            Letter::N => Some(Letter::M),
+            Letter::O => Some(Letter::N),
+            Letter::P => Some(Letter::O),
+            Letter::Q => Some(Letter::P),
+            Letter::R => Some(Letter::Q),
+            Letter::S => Some(Letter::R),
+            Letter::T => Some(Letter::S),
+            Letter::U => Some(Letter::T),
+            Letter::V => Some(Letter::U),
+            Letter::W => Some(Letter::V),
+            Letter::X => Some(Letter::W),
+            Letter::Y => Some(Letter::X),
+            Letter::Z => Some(Letter::Y),
+        }
+    }
 }
 
 struct LetterCounts(EnumMap<Letter, u32>);
 
 impl LetterCounts {
-    pub(crate) fn count_letters(word: &[Letter]) -> LetterCounts {
+    pub fn count_letters(word: &[Letter]) -> LetterCounts {
         let mut ret = enum_map!{
             Letter::A => 0,
             _ => 0,
@@ -118,12 +180,33 @@ impl LetterCounts {
         LetterCounts(ret)
     }
 
-    pub(crate) fn checked_sub(&self, other: &LetterCounts) -> Option<LetterCounts> {
+    pub fn checked_sub(&self, other: &LetterCounts) -> Option<LetterCounts> {
         let mut ret = EnumMap::new();
         for (key, val) in self.0 {
             ret[key] = val.checked_sub(other.0[key])?;
         }
         Some(LetterCounts(ret))
+    }
+
+    pub fn add(&self, other: &LetterCounts) -> LetterCounts {
+        LetterCounts(enum_map!{
+            k => self.0[k] + other.0[k],
+        })
+    }
+
+    pub fn exceeds(&self, other: &LetterCounts) -> bool {
+        for (key, val) in self.0 {
+            if val < other.0[key] {
+                return true;
+            }
+        }
+        false
+    }
+}
+
+impl Default for LetterCounts {
+    fn default() -> LetterCounts {
+        LetterCounts(enum_map!{_ => 0})
     }
 }
 
@@ -176,8 +259,67 @@ impl<'a> WordList<'a> {
         ret
     }
 
-    pub fn find_anagrams(&self, lc: &LetterCounts) -> Option<Vec<&'a [Letter]>> {
-        None
+    pub fn find_anagrams(&'a self, lc: &'a LetterCounts) -> AnagramSearch<'a> {
+        AnagramSearch::new(self, lc)
+    }
+}
+
+struct AnagramSearch<'a> {
+    wl: &'a WordList<'a>,
+    phrase: Vec<&'a CountedWord>,       // Word stack
+    phrase_letter_counts: LetterCounts, // Always represents the letter counts in phrase
+    target: &'a LetterCounts,
+    progress: EnumMap<Letter, usize>,
+}
+
+impl<'a> AnagramSearch<'a> {
+    fn new(wl: &'a WordList<'a>, target: &'a LetterCounts) -> AnagramSearch<'a> {
+        AnagramSearch {
+            wl,
+            phrase: vec![],
+            phrase_letter_counts: LetterCounts::default(),
+            target,
+            progress: enum_map!{_ => 0},
+        }
+    }
+
+    pub fn find_anagrams(&mut self) -> Option<Vec<&'a [Letter]>> {}
+
+    fn inc(&mut self, low_letter: Letter) -> Option<()> {
+        let sorted_list = self.wl.sorted_lists[low_letter];
+        let room = self.target.checked_sub(&self.phrase_letter_counts).expect(
+            "It shouldn't be possible for a phrase to have less than zero of a certain letter.",
+        );
+
+        let next_index = self.progress[low_letter] + 1;
+        if next_index >= sorted_list.len()
+            || sorted_list[next_index].counts[low_letter] > room[low_letter]
+        {
+            self.progress[low_letter] = 0;
+            self.inc(low_letter.dec()?)
+        } else {
+            self.progress[low_letter] = next_index;
+            Some(())
+        }
+    }
+
+    fn push_word(&mut self, word: &'a CountedWord) -> Option<()> {
+        let potential_count = self.phrase_letter_counts.add(&word.counts);
+        if potential_count.exceeds(self.target) {
+            None
+        } else {
+            self.phrase.push(word);
+            self.phrase_letter_counts = potential_count;
+            Some(())
+        }
+    }
+
+    fn pop_word(&mut self) -> Option<()> {
+        let word = self.phrase.pop()?;
+        self.phrase_letter_counts = self.phrase_letter_counts.checked_sub(&word.counts).expect(
+            "It shouldn't be possible for a phrase to have less than zero of a certain letter.",
+        );
+        Some(())
     }
 }
 
